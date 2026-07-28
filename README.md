@@ -1,321 +1,214 @@
-# Grounded: 건축 법령 AI 에이전트 (포트폴리오용)
+# GROUNDED (그라운디드): 건축 법령 AI 에이전트 (포트폴리오용)
 
-> 법령 검색을 넘어, **조건 기반 판단 + 조문 근거 + 계산 과정**까지 제공하는 AI 에이전트 서비스
+> 법령 검색을 넘어, **대화형 상담 + 조문 근거 + 참조 관계 추적**까지 제공하는 AI 에이전트 서비스
 
-## Live Demo
+## 베타서비스 사이트
 
-- Live Demo: `https://grounded.wavetox.com/`
-
+- `https://grounded.wavetox.com/`
 
 ## Overview
 
-Grounded는 건축 인허가 질의를 자연어로 입력하면 관련 조문을 검색하고, 조건을 구조화한 뒤, 계산 가능한 질문은 근거와 함께 결과까지 제시하는 법령 특화 AI 서비스입니다.
+GROUNDED는 건축 인허가 관련 질의를 자연어로 입력하면, 관련 법령/자치법규 조문을 검색하고 근거를 확장한 뒤 실제 조문을 인용해 답변하는 법령 특화 AI 상담 서비스입니다. 1인 개발로 시작해 실사용 서비스로 배포·운영 중이며, 법령(5,000여 건)과 지자체 자치법규를 함께 다룹니다.
 
-핵심 문제는 법령 데이터의 복잡성이었습니다. 실제 문서는 조/항/호 구조, 별표, 약어, 상호참조가 얽혀 있어 단순 벡터 검색만으로는 실무 품질을 만들기 어렵습니다. 이 문제를 해결하기 위해 검색, 근거 확장, 답변 생성 단계를 분리하고 상태 그래프로 제어하는 구조를 설계했습니다.
-
+핵심 문제는 법령 데이터의 복잡성이었습니다. 실제 조문은 조/항/호 구조, 다른 조문·다른 법령에 대한 상호참조, 지자체별로 달라지는 조례가 얽혀 있어 단순 벡터 검색만으로는 실무 품질의 답변을 만들기 어렵습니다. 이 문제를 해결하기 위해 (1) 질의에서 법률 쟁점을 뽑아 여러 방식으로 검색하고, (2) 근거가 충분한지 판단해 필요한 것만 추가로 모으고, (3) 여러 턴에 걸친 대화에서는 이전 문맥으로 다음 질문을 재작성하는 파이프라인을 설계했습니다.
 
 ## Key Features
 
-1. 조건 슬롯 추출 기반 질의 정규화
-- 주소/용도/대지면적/연면적/층수/도로너비 등 조건 구조화
-- 누락 슬롯 자동 탐지
+1. 법률 쟁점 기반 검색
+- 질문에서 검색해야 할 법률 쟁점을 추출(예: "건폐율, 건축선"처럼 복수 쟁점을 각각 분리)
+- 원문 검색 + 쟁점별 검색 + 쟁점별 확장 검색어를 함께 사용, 중복 등장 빈도로 후보를 재정렬
 
-2. 타겟 중심 법령 검색 + LLM 필터
-- `건축선`, `용적률`, `건폐율`, `주차` 타겟 추출
-- 타겟별 검색 결과 관련도 재판정
+2. 근거 수집 전략 판단
+- 1차 검색 결과만으로 답변이 충분한지, 참조 조문 확장이 필요한지, 지역 조례를 더 찾아야 하는지, 담당부서 정보가 필요한지를 답변 생성 전에 먼저 판단
+- 질문의 위험도(단정하면 안 되는 허가/위반 판단 등)에 따라 답변 톤을 다르게 유도
 
-3. 0-hop 고속 응답 경로
-- 프론트 연동에서 지연을 줄이는 빠른 경로
-- `references` 기반 근거 표시
+3. 참조 조문 추적 + 관계 시각화
+- 조문 안의 내부/외부 참조를 추적해 검색에 안 잡힌 근거 조문을 추가로 확보
+- 법령 간 참조 관계를 그래프로 시각화하는 별도 페이지 제공
 
-4. 참조 추적 기반 근거 확장
-- 내부 참조/모법 참조 추적
-- 유사도 검색 단독 사용 시의 근거 누락 보완
+4. 대화형 멀티턴 상담
+- 첫 질문 이후 이어지는 질문("그럼 주차장은?")을 이전 대화 맥락으로 독립적인 질문으로 재작성해서 검색
+- 대화 중 확인된 조건(지역/용도/공사유형 등)을 다음 턴에도 유지하고, 정정되면 갱신
 
-5. 별표(appendix) 전용 룩업
-- 별표 1 용도 분류 별도 인덱스
-- 정확 매칭 -> 별칭 매칭 -> 키워드 유사도
+5. 자치법규 통합 검색
+- 국가 법령뿐 아니라 지자체 조례/규칙까지 같은 파이프라인으로 검색
+- 법령 표(table)를 원문 구조를 살려 화면에 표시
 
 ## Architecture
 
 ```mermaid
 flowchart TD
     U[User Query] --> FE[Web Client]
-    FE --> API[FastAPI]
+    FE -->|SSE| API[FastAPI]
 
-    API --> O1[Condition Slot Parser]
-    O1 --> O2[Target Extractor]
-    O2 --> O3[Retriever]
+    API --> C0{2번째 턴 이상?}
+    C0 -->|예| CQ["Contextualize Query\n(대화 이력 + 확인된 조건 참고)"]
+    CQ --> IE
+    C0 -->|아니오| IE["Legal Issue Extraction\n(복수 쟁점 분리)"]
 
-    O3 --> Q[(Qdrant: building_law)]
-    O3 --> LLMF[LLM Filter]
-    LLMF --> O4[Reference Tracker]
+    IE --> RET1["원문 검색"]
+    IE --> RET2["쟁점별 검색"]
+    IE --> RET3["쟁점별 확장 검색어"]
+    RET1 --> Q[(Vector DB\nQdrant)]
+    RET2 --> Q
+    RET3 --> Q
+    Q --> DEDUP["중복 병합 + 등장빈도 집계"]
+    DEDUP --> RR["Rerank\n(Voyage rerank)"]
+    RR --> PLAN{"Evidence Strategy\n충분/부분/부족?"}
 
-    O4 --> A1[Appendix Lookup]
-    A1 --> J[(appendix1_terms.json)]
+    PLAN -->|참조 확장 필요| REF["Reference Expansion\n(내부/외부/모법 참조 추적)"]
+    PLAN -->|지역 조례 필요| LOC["Local Regulation Search\n(자치법규 필터)"]
+    PLAN -->|메타데이터 필요| META["Metadata Lookup\n(소관부처/부서/시행일)"]
+    PLAN -->|충분함| GEN
 
-    O4 --> O5[Answer Composer]
-    O5 --> FE
+    REF --> MERGE["근거 문서 병합"]
+    LOC --> MERGE
+    META --> MERGE
+    MERGE --> GEN["Answer Generation\n(risk_level에 따라 톤 조절)"]
+    GEN --> FILT["실제 인용된 근거만 필터링"]
+    FILT --> FE
 
     subgraph Ingestion Pipeline
-      R1[Law API Fetch]
-      R2[Parser: 조/항/호]
-      R3[Reference Extractor]
-      R4[Abbreviation Resolver]
-      R5[Index Qdrant]
-      R1 --> R2 --> R3 --> R4 --> R5
+      R1[Law/Ordinance API Fetch] --> R2["Parser\n(조/항/호 구조화, 표 보존)"]
+      R2 --> R3["Reference Extractor\n(내부/외부/모법 참조 LLM 추출)"]
+      R3 --> R4[Embedding + Index]
     end
 
-    R5 --> Q
+    R4 --> Q
 ```
+
+**흐름 요약**
+1. 두 번째 턴부터는 이전 대화·이미 확인된 조건을 반영해 질문을 독립적인 형태로 재작성한 뒤 검색을 시작합니다.
+2. 질문에서 법률 쟁점을 분리하고, 원문/쟁점/확장 검색어 세 갈래로 검색한 뒤 등장 빈도와 재정렬 점수로 후보를 추립니다.
+3. 근거가 충분한지 먼저 판단하고, 부족한 부분만 선택적으로(참조 조문/지역 조례/메타데이터) 추가로 모읍니다.
+4. 답변은 질문의 위험도(단정 가능 여부)에 따라 톤을 조절하고, 실제로 인용한 근거만 화면에 노출합니다.
 
 ## Challenges & Solutions
 
 1. 법령 상호참조로 인한 근거 누락
-- 문제: 단순 검색으로는 판단에 필요한 참조 조문 누락
-- 해결: `internal_refs`, `parent_law_refs` 추적 단계 분리
-- 결과: 근거 연관성/답변 신뢰도 개선
+- 문제: 조문에 적힌 참조 표현(`"제19조의15"` 같은 본조+가지번호 결합 형태)이 실제 검색 인덱스의 필드 구조(본조/가지번호 분리 저장)와 형태가 달라서, 참조가 실제로 존재하는 조문을 가리켜도 매칭에 계속 실패
+- 해결: 참조 표현을 인덱스 필드 형태로 분리하는 정규화 단계 추가, 참조 매칭 전용 조회 경로 별도 구성
+- 결과: 검색 결과에 없던 근거 조문(결격사유 등)이 실제로 답변에 반영됨을 확인
 
-2. 복합 질의에서 검색 잡음 증가
-- 문제: 복수 타겟 질의에서 무관 조문 유입
-- 해결: 타겟별 검색 후 LLM 필터
-- 결과: 후보 조문 precision 향상
+2. 후속 질문이 이전 문맥 없이 검색되는 문제
+- 문제: "그럼 주차장은?" 같은 후속 질문을 그대로 검색하면 이전 대화("다가구주택 증축")의 맥락이 사라져 무관한 결과가 섞임
+- 해결: 이전 대화 이력 + 이미 확인된 사용자 조건을 참고해 현재 질문을 독립적인 질문으로 재작성하는 단계를 검색 전에 추가
+- 결과: 재작성된 질문으로 검색하니 실제로 관련 조례(부설주차장 설치기준)가 근거로 잡히는 것을 확인
 
-3. 응답 속도와 근거 설명의 트레이드오프
-- 문제: 참조 확장 경로의 지연
-- 해결: 0-hop 경로 분리 + 필요 시 확장 경로
-- 결과: 체감 속도/근거 품질 균형 확보
+3. 외부 LLM API의 일시적 무응답 대응
+- 문제: 참조 추출용 LLM 호출이 timeout 없이 대기하도록 구성돼 있어, 외부 API가 응답 없이 연결만 유지하면 작업 전체가 무기한 정지
+- 해결: 명시적 timeout + 지수 백오프 재시도(rate limit뿐 아니라 일반 네트워크 오류도 포함)로 교체
+- 결과: 일시적 장애 시에도 자동 복구되어 대량 배치 작업이 계속 진행
 
-## Prompts 
+## Prompts
 
-실제 서비스에 반영된 프롬프트와 일부 상이할 수 있습니다.
+실제 서비스에 반영된 프롬프트를 단순화한 예시입니다 — 정확한 문구/제약조건은 프로덕션 프롬프트와 다를 수 있습니다.
 
-### 1) Target Extraction
-
-```text
-너는 건축 인허가 질의에서 '무엇을 구해야 하는지' 타겟을 추출한다.
-출력은 JSON만 반환:
-{"targets":["...","..."]}
-규칙:
-- 질문에 명시된 타겟만 추출
-- 복수 타겟이면 모두 포함
-- 타겟이 없으면 빈 배열
-
-query: {query}
-```
-
-### 2) Target Result Filter
+### 1) Legal Issue Extraction
 
 ```text
-너는 법령 검색 결과 필터 심사기다.
+너는 건축법령 검색 쿼리 생성기다.
+사용자 질문에서 검색해야 할 독립적인 법률 쟁점을 모두 추출하고, 각 쟁점의 추가 검색어를 생성한다.
 
-### Rules
-- target과 직접적으로 관련된 조문만 keep=true로 판정한다.
-- 특정 지역이나 조건에 해당하는 조문일 경우, target이 특정 지역에 해당된다면 keep=true로 판정한다.
-- target과 무관한 조문은 keep=false로 판정한다.
-- 오직 JSON 형식으로만 출력한다. 다른 텍스트는 무시한다.
-
-### Output Format:
-"judgments":["idx":0,"keep":true,"reason":"..."]
-
-### Context
-target: {target}
-Chunks: {items}
-)
-```
-
-### 3) Ref Expansion Need Check
-
-```text
-너는 법률 QA의 ref 필요성 판단기다.
-중요: ref 내용을 미리 보지 말고, 현재 컨텍스트만으로 답변 가능한지 판단한다.
-기준:
-- 현재 컨텍스트만으로 질문의 판단/계산이 가능하면 answerable=true
-- 조문 이해를 위해 참조 법령/조항 해석이 필수면 answerable=false
-출력은 JSON만:
-{"answerable": true/false, "reason": "..."}
-
-query: {query}
-targets: {targets}
-current_contexts: {evidence}
-```
-
-### 4) Ref Follow Decision
-
-```text
-너는 법률 참조 추적 판단기다.
-중요: ref 조문 본문은 아직 읽지 않는다. 현재 chunk 맥락만으로 판단한다.
-출력은 JSON만:
-{"follow": true/false, "priority": 0|1|2, "reason": "..."}
-
-query: {query}
-targets: {targets}
-current_chunk_preview: {source}
-raw_ref: {raw_ref}
-ref_key: {ref_key}
-```
-
-### 5) Final Answer Generation
-
-```text
-당신은 20년 경력의 건축사입니다.
-당신의 전문성을 발휘하고, 관련 문서를 기반으로 사용자 질문에 대해 답변하세요.
-주의: 제공된 문서 내용을 기반으로 정확하게 답변하세요.
-근거에 없는 수치/조건은 추정하지 말고 '근거 불충분'이라고 작성하세요.
 출력 형식:
-1) 질문 요약
-2) 적용 근거
-3) 판단
-4) 추가 필요조건
+{"legal_issues": [{"issue": "...", "search_queries": ["...", "..."]}]}
 
-사용자 질문: {query}
-관련 문서: {evidence}
-(조건부) 참조 문서: {ref_evidence}
-```
-
-### 6) Condition Slot Extraction
-
-```text
-너는 건축 인허가 질의에서 조건 슬롯을 추출한다.
-출력은 JSON만: {"conditions": {...}}
-가능 슬롯: usage, road_width_m, lot_area_m2, floors, height_m, address, district
-값이 없으면 키를 만들지 말고 추측하지 마라.
-
-input: {text}
-```
-
-### 7) Clarification Decision
-
-```text
-너는 건축법률 협업 에이전트의 추가질문 판단기다.
-출력 JSON: {"need_clarification": true/false, "question":"...", "reason":"..."}
-현재 query/targets/user_facts와 contexts(본문)를 모두 보고 판단한다.
-추측 금지.
+규칙:
+- 질문에 포함된 서로 다른 법률 쟁점을 각각 별도 issue로 추출한다.
+- 지역명, 주소, 숫자, 건물명은 독립적인 issue로 만들지 않는다.
+- 질문에 없는 법령명, 조문 번호 또는 사실관계를 추측하지 않는다.
 
 query: {query}
-targets: {targets}
-user_facts: {user_facts}
-dialogue_history: {dialogue_history}
-context_memory: {context_memory}
-contexts: {contexts}
 ```
 
-### 8) Post-Answer Consistency Check
+### 2) Evidence Collection Strategy
 
 ```text
-너는 법률 답변 일관성 검사기다.
-현재 answer가 사용자 추가입력 없이 완결적인지 판단한다.
-출력 JSON: {"need_clarification": true/false, "question":"...", "reason":"..."}
-- answer가 추가 정보가 필요하다고 말하면 need_clarification=true
-- true이면 사용자에게 바로 답할 수 있는 질문 1개를 만든다.
-- false이면 question은 빈 문자열.
+당신은 건축법률 상담의 근거 수집 및 답변 전략을 결정한다.
+사용자 질문과 1차 검색 결과를 분석하여 최종 답변 전에 추가로 조회해야 할 정보를 판단하라.
+실제 답변이나 추가질문은 생성하지 않는다.
+
+출력 형식:
+{"primary_intent": "...", "risk_level": "low|medium|high",
+ "evidence_status": "sufficient|partial|none",
+ "answer_mode": "direct|conditional|insufficient",
+ "needs_reference_expansion": false, "needs_local_regulation": false,
+ "additional_search_queries": [], "missing_facts": []}
 
 query: {query}
-targets: {targets}
 user_facts: {user_facts}
-answer: {answer}
+initial_contexts: {contexts}
 ```
 
-### 9) Clarification Reply Interpretation 
+### 3) Contextualize Follow-up Query
 
 ```text
-사용자 명확화 응답을 해석해라. JSON만 반환.
-{"utterance_type":"answer|requestion|decline|other","extracted_facts":{},"refined_question":"..."}
-clarification_question: {clarification_question}
-user_reply_text: {user_reply_text}
-dialogue_history: {dialogue_history}
-context_memory: {context_memory}
-```
+너는 건축법령 상담 대화의 문맥을 정리하는 역할이다.
+현재 사용자 질문이 이전 대화를 참조하는지 판단하고,
+법령 검색에 사용할 수 있는 독립적인 질문으로 다시 작성하라.
 
-### 10) Calculator Prompt
-
-```text
-너는 건축법률 계산 엔진이다. 근거 조항, 계산식, 중간값, 최종값을 모두 명시하라.
-조건: {conditions}
-질문: {user_query}
-컨텍스트 조항: {article_nums}
-```
-
-### 11) Simple LLM Chat Prompt
-
-```text
-You are an architect with 20 years’ experience.
-Your name is 아키.
-
-### Rules
-- Respond based on your architectural expertise.
-- Explain in a way that is easy to understand.
-- Respond concisely in Korean.
-
-### 대화 이력:
-{hist_text}
-
-### 질문:
-{query}
-```
-
-### 12) Abbreviation Extraction by Law 
-
-```text
-다음 법령 텍스트에서 축약어 정의만 추출하라.
 규칙:
-1) 축약어가 아닌 일반 단어는 제외
-2) 값은 가능한 한 조항 정보를 포함해 완전한 명칭으로 작성
-3) JSON 객체만 출력
-출력 형식 예시: {"법": "건축법", "위원회": "건축법 제4조에 따른 건축위원회"}
+- 지시어("그거", "그럼" 등)는 이전 대화에서 확인되는 대상으로 치환한다.
+- 기존에 확인된 사용자 조건(지역/용도/공사유형 등)은 유지하되, 사용자가 새 조건을 말하면 갱신한다.
+- 이전 대화에서 확인되지 않은 조건은 추측하지 않는다.
 
-법령명: {law_name}
-텍스트:
-{context}
+출력 형식:
+{"standalone_query": "...", "is_follow_up": true, "user_facts": {...}}
+
+이전 대화 요약: {conversation_summary}
+현재 질문: {query}
 ```
 
-### 13) Abbreviation Extraction by Chunk
+### 4) Final Answer Generation
 
 ```text
-다음 단일 조문에서 정의된 축약어만 JSON으로 추출하라.
-반드시 축약어 키와 확장명 값만 포함하고, 모르면 빈 JSON을 반환하라.
-규칙:
-1) 축약어 패턴은 보통 '(이하 "X"이라 한다)'
-2) 값은 가능한 완전한 명칭으로 작성
-3) 출력은 JSON 객체만
-예시: {"위원회": "건축법 제4조에 따른 건축위원회"}
+당신은 30년 경력의 건축사입니다.
+사용자 질문, 근거 수집 전략, 법령 근거를 바탕으로 답변하세요.
 
-법령명: {chunk.law_name}
-조문: 제{chunk.article_num}조
-제목: {chunk.article_title}
-본문:
-{text}
+작성 규칙:
+- 제공된 근거 문서에 있는 내용만 법적 근거로 사용한다.
+- 근거에 없는 수치/조건/법령명은 추정하지 않는다.
+- risk_level이 high이면 허가 가능 여부, 위반 여부를 단정하지 않는다.
+- 실제 답변에 사용한 문서만 인용 목록에 포함한다.
+
+답변 구조: 1) 결론 2) 근거 3) 추가 확인 필요 여부
+
+query: {query}
+evidence: {evidence}
 ```
 
 ## Screenshots
 
-- 홈/채팅 화면: `assets/screenshots/home.png`
-- 법령 근거 패널: `assets/screenshots/references.png`
-- 타겟 검색 결과: `assets/screenshots/target-search.png`
+- AI 건축법령 상담: `assets/screenshots/chat.png`
+- 법령 문서/조항 검색: `assets/screenshots/search-doc.png`
+- 참조 관계 그래프: `assets/screenshots/ref-graph.png`
 
 ## Tech Stack
 
 ### AI / LLM
-- LangChain
-- LangGraph
-- CLOVA X (Chat + Embeddings)
+- Google Gemini / Ollama Cloud (provider 교체 가능한 구조)
+- Voyage AI (임베딩 + 재정렬)
 
 ### Retrieval / Data
-- Qdrant (Vector DB)
-- 법령 API 데이터 파싱 파이프라인 (Python)
-- JSON 기반 별표 인덱스
+- Qdrant Cloud (Vector DB)
+- 법령/자치법규 API 데이터 파싱 파이프라인 (Python)
+- SQLite (법령 메타데이터), Supabase (대화 기록/피드백 로깅)
 
 ### Backend
-- FastAPI
-- Pydantic
+- FastAPI, Pydantic
+- SSE(Server-Sent Events) 기반 진행상황 스트리밍
+
+### Frontend
+- React + Vite
+- 그래프 시각화(vis-network)
 
 ### Infra / Ops
 - Docker
-- Railway / Vercel
+- Railway (백엔드) / Vercel (프론트엔드)
 
 ## Public Code Snippets
 
-비공개 저장소 전체를 공개하지 않고도 설계 역량을 보여주기 위해, 핵심 AI 로직 일부를 스니펫으로 분리했습니다.
+비공개 저장소 전체를 공개하지 않고도 설계 역량을 보여주기 위해, 핵심 로직을 단순화한 스니펫으로 분리했습니다(실제 프로덕션 코드 그대로가 아닌 개념 설명용 재구현입니다).
 
 - [Slot Parser](./snippets/01_condition_slot_parser.py)
 - [Target Retrieval + Filter](./snippets/02_target_retrieval.py)
@@ -326,5 +219,5 @@ Your name is 아키.
 
 이 저장소는 포트폴리오 목적의 공개 버전입니다.
 
-- 포함: 아키텍처/핵심 로직 스니펫/실제 프롬프트/문제 해결 사례
+- 포함: 아키텍처/핵심 로직 스니펫/단순화된 프롬프트 예시/문제 해결 사례
 - 제외: 운영 전체 코드, 민감 설정, 내부 배포 구성, 비공개 비즈니스 로직
