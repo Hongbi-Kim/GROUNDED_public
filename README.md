@@ -177,12 +177,6 @@ query: {query}
 evidence: {evidence}
 ```
 
-## Screenshots
-
-- AI 건축법령 상담: `assets/screenshots/chat.png`
-- 법령 문서/조항 검색: `assets/screenshots/search-doc.png`
-- 참조 관계 그래프: `assets/screenshots/ref-graph.png`
-
 ## Tech Stack
 
 ### AI / LLM
@@ -205,6 +199,17 @@ evidence: {evidence}
 ### Infra / Ops
 - Docker
 - Railway (백엔드) / Vercel (프론트엔드)
+
+## Screenshots
+- AI 건축법령 상담
+![AI 건축법령 상담](assets/screenshots/chat.png)
+
+- 법령 문서/조항 검색
+![법령 문서/조항 검색](assets/screenshots/search-doc.png)
+
+- 참조 관계 그래프
+![참조 관계 그래프](assets/screenshots/ref-graph.png)
+
 
 ## Public Code Snippets
 
