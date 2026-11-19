@@ -691,12 +691,11 @@ evidence: {evidence}
 
 ## Public Code Snippets
 
-비공개 저장소 전체를 공개하지 않고도 설계 역량을 보여주기 위해, 핵심 로직을 단순화한 스니펫으로 분리했습니다(실제 프로덕션 코드 그대로가 아닌 개념 설명용 재구현입니다).
+비공개 저장소 전체를 공개하지 않고도 설계 역량을 보여주기 위해, **버전별로 문제를 푼 핵심 로직만** 단순화한 스니펫으로 분리했습니다(실제 프로덕션 코드 그대로가 아닌 개념 설명용 재구현, 대부분 바로 실행 가능). 전체 목록과 결과 지표: [snippets/README.md](./snippets/README.md)
 
-- [Slot Parser](./snippets/01_condition_slot_parser.py)
-- [Target Retrieval + Filter](./snippets/02_target_retrieval.py)
-- [Reference Tracking](./snippets/03_reference_tracker.py)
-- [Appendix Lookup](./snippets/04_appendix_lookup.py)
+- **v1 — 초기 설계**: [조건 추출](./snippets/v1/01_condition_slot_parser.py) · [쟁점별 검색](./snippets/v1/02_target_retrieval.py) · [참조 추적(법령 2개 하드코딩 — v1의 한계)](./snippets/v1/03_reference_tracker.py) · [별표 조회](./snippets/v1/04_appendix_lookup.py)
+- **v2 — 에이전트 하네스**: [예산·재시도](./snippets/v2/05_budget_and_retry.py) · [실패해도 답변 + 다시 확인](./snippets/v2/06_graceful_node.py) · [법령 참조 연결기 3.9% → 97.9%](./snippets/v2/07_law_resolver.py) · [참조 확장 고르는 순서](./snippets/v2/08_select_expansion.py) · [인용 추정](./snippets/v2/09_citation_inference.py)
+- **v3 — 멀티 에이전트 하네스**: [베리의 참조 후보표](./snippets/v3/10_beri_candidates.py) · [아키·테오·베리 그래프](./snippets/v3/11_v3_graph.py)
 
 ## Repository Policy (Public)
 
