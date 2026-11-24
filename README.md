@@ -1,8 +1,8 @@
-# GROUNDED (그라운디드): 건축 법령 AI 에이전트 하네스 (포트폴리오용)
+# GROUNDED (그라운디드): 건축 법령 AI 에이전트 서비스 (포트폴리오용)
 
 > 법령 검색을 넘어, **대화형 상담 + 조문 근거 + 참조 관계 추적**까지 제공하는 AI 에이전트 서비스
 
-👉🏻 [GROUNDED (건축 법령 AI 에이전트 하네스)](https://grounded.thewavera.com/)
+👉🏻 [GROUNDED (건축 법령 AI 에이전트 서비스 바로가기)](https://grounded.thewavera.com/)
 
 ## 목차
 
